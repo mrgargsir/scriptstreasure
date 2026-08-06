@@ -1,0 +1,54 @@
+// 👉 Finds every "Delete workflow run" form on the page and submits them one by one via fetch,
+// 👉 so you don't have to click through each confirmation dialog manually.
+
+async function deleteAllWorkflowRuns(delayMs = 1500) {
+  // 👉 Grab every delete form (action contains "/actions/runs/" and has _method=delete)
+  const forms = Array.from(document.querySelectorAll('form[action*="/actions/runs/"]'))
+    .filter(f => {
+      const methodInput = f.querySelector('input[name="_method"]');
+      return methodInput && methodInput.value === 'delete';
+    });
+
+  console.log(`Found ${forms.length} workflow run(s) to delete.`);
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const form of forms) {
+    const action = form.getAttribute('action');
+    const token = form.querySelector('input[name="authenticity_token"]').value;
+
+    const body = new URLSearchParams();
+    body.append('_method', 'delete');
+    body.append('authenticity_token', token);
+
+    try {
+      const res = await fetch(action, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+        credentials: 'include', // 👉 sends your session cookie so GitHub accepts it
+      });
+
+      if (res.ok || res.status === 302) {
+        console.log(`✅ Deleted: ${action}`);
+        successCount++;
+      } else {
+        console.warn(`⚠️ Failed (${res.status}): ${action}`);
+        failCount++;
+      }
+    } catch (err) {
+      console.error(`❌ Error deleting ${action}:`, err);
+      failCount++;
+    }
+
+    // 👉 delay between requests to avoid hitting GitHub's rate limits
+    await new Promise(r => setTimeout(r, delayMs));
+  }
+
+  console.log(`Done. Success: ${successCount}, Failed: ${failCount}`);
+}
+
+deleteAllWorkflowRuns();
